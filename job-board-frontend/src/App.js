@@ -3,7 +3,7 @@ import Web3 from "web3";
 import JobBoard from "./contract/JobBoard.json";
 import "./App.css";
 
-const CONTRACT_ADDRESS = "0xd723fDa35ca78066499c828220379C70Bb7D3e44";
+const CONTRACT_ADDRESS = "0x6B42fb9D0F43259FDD76c7c63E15274949eF8966";
 
 function App() {
   const [account, setAccount] = useState(null);
@@ -24,7 +24,6 @@ function App() {
         const web3Instance = new Web3(window.ethereum);
         await window.ethereum.request({ method: "eth_requestAccounts" });
         
-        // Check if connected to the right network
         const chainId = await web3Instance.eth.getChainId();
         const chainIdNumber = Number(chainId);
         console.log("Chain ID:", chainIdNumber);
@@ -38,12 +37,9 @@ function App() {
         setAccount(accounts[0]);
         setWeb3(web3Instance);
   
-        // Initialize contract with proper ABI validation
         if (!JobBoard.abi) {
           throw new Error("ABI not loaded correctly");
         }
-        
-        console.log("Contract ABI:", JobBoard.abi); // Debug ABI
         
         const contractInstance = new web3Instance.eth.Contract(
           JobBoard.abi,
@@ -51,34 +47,29 @@ function App() {
         );
         setContract(contractInstance);
         
-        // Test contract connection
         try {
           const testCount = await contractInstance.methods.getJobCount().call();
           console.log("Contract connection test successful. Job count:", testCount);
         } catch (testError) {
           console.error("Contract test failed:", testError);
-          throw new Error(`Contract test failed: ${testError.message}`);
+          throw new Error(Contract test failed: ${testError.message});
         }
         
-        // Listen for account changes
         window.ethereum.on('accountsChanged', (newAccounts) => {
           setAccount(newAccounts[0] || null);
         });
         
-        // Listen for chain changes
         window.ethereum.on('chainChanged', () => {
           window.location.reload();
         });
       } catch (error) {
         console.error("Error connecting wallet:", error);
-        setError(`Connection error: ${error.message}`);
+        setError(Connection error: ${error.message});
       }
     } else {
       setError("Please install MetaMask or another Web3 provider!");
     }
   };
-
-  // Load Jobs with improved error handling
   useEffect(() => {
     const loadJobs = async () => {
       if (!contract || !web3) return;
@@ -87,10 +78,7 @@ function App() {
       setError("");
       
       try {
-        console.log("Loading jobs...");
-        const count = await contract.methods.getJobCount().call();
-        console.log("Job count:", count);
-        
+        const count = Number(await contract.methods.getJobCount().call());
         const jobsArray = [];
         
         for (let i = 0; i < count; i++) {
@@ -101,14 +89,14 @@ function App() {
             jobsArray.push({
               id: i,
               title: job.title,
-              budget: web3.utils.fromWei(job.budget, 'ether'),
+              budget: web3.utils.fromWei(job.budget.toString(), 'ether'),
               employer: job.employer,
               freelancer: job.freelancer,
-              status: job.status,
-              escrowed: web3.utils.fromWei(escrowed, 'ether')
+              status: job.status.toString(), // Convert enum to string
+              escrowed: web3.utils.fromWei(escrowed.toString(), 'ether')
             });
           } catch (jobError) {
-            console.error(`Error loading job ${i}:`, jobError);
+            console.error(Error loading job ${i}:, jobError);
             continue;
           }
         }
@@ -116,7 +104,7 @@ function App() {
         setJobs(jobsArray);
       } catch (error) {
         console.error("Error loading jobs:", error);
-        setError(`Error loading jobs: ${error.message}`);
+        setError(Error loading jobs: ${error.message});
       } finally {
         setLoading(false);
       }
@@ -125,7 +113,7 @@ function App() {
     loadJobs();
   }, [web3, contract]);
 
-  // Post Job with improved gas handling
+  // Post Job - Fixed with proper BigInt handling
   const postJob = async () => {
     if (!contract || !newJobTitle || !newJobBudget) {
       setError("Please fill all fields and ensure contract is loaded");
@@ -135,45 +123,32 @@ function App() {
     try {
       setLoading(true);
       setError("");
+      
+      // Convert budget to wei and ensure it's a string
       const budgetInWei = web3.utils.toWei(newJobBudget, 'ether');
       
-      // Estimate gas with error handling
-      let gasEstimate;
-      try {
-        gasEstimate = await contract.methods
-          .postJob(newJobTitle, budgetInWei)
-          .estimateGas({ from: account });
-      } catch (estimateError) {
-        console.error("Gas estimate failed:", estimateError);
-        throw new Error(`Gas estimation failed: ${estimateError.message}`);
-      }
-      
-      // Add 20% buffer to gas estimate
-      const gasWithBuffer = Math.floor(gasEstimate * 1.2);
-      
-      console.log(`Posting job with ${gasWithBuffer} gas`);
-      
+      // Send transaction
       const receipt = await contract.methods
         .postJob(newJobTitle, budgetInWei)
         .send({ 
           from: account,
-          gas: gasWithBuffer
+          gas: 500000
         });
       
       if (receipt.status) {
-        // Refresh jobs
-        const count = await contract.methods.getJobCount().call();
+        // Refresh jobs list
+        const count = Number(await contract.methods.getJobCount().call());
         const newJob = await contract.methods.getJob(count - 1).call();
         const escrowed = await contract.methods.getEscrowed(count - 1).call();
         
-        setJobs([...jobs, {
+        setJobs(prevJobs => [...prevJobs, {
           id: count - 1,
           title: newJob.title,
           budget: newJobBudget,
           employer: newJob.employer,
           freelancer: newJob.freelancer,
-          status: newJob.status,
-          escrowed: web3.utils.fromWei(escrowed, 'ether')
+          status: newJob.status.toString(),
+          escrowed: web3.utils.fromWei(escrowed.toString(), 'ether')
         }]);
         
         setNewJobTitle("");
@@ -183,157 +158,116 @@ function App() {
       }
     } catch (error) {
       console.error("Error posting job:", error);
-      setError(`Failed to post job: ${error.message}`);
+      setError(Failed to post job: ${error.message});
     } finally {
       setLoading(false);
     }
   };
 
-  // Apply for Job with error handling
+  // Apply for Job - Updated
   const applyForJob = async (jobId) => {
-    if (!contract) {
-      setError("Contract not loaded");
-      return;
-    }
+    if (!contract) return;
     
     try {
       setLoading(true);
-      setError("");
+      await contract.methods.applyForJob(jobId).send({ from: account });
       
-      const receipt = await contract.methods.applyForJob(jobId).send({ from: account });
-      
-      if (receipt.status) {
-        // Update job status
-        const updatedJobs = [...jobs];
-        updatedJobs[jobId].freelancer = account;
-        updatedJobs[jobId].status = "1"; // Assigned
-        setJobs(updatedJobs);
-      } else {
-        throw new Error('Transaction failed');
-      }
+      // Optimistic update
+      setJobs(prevJobs => prevJobs.map(job => 
+        job.id === jobId ? {
+          ...job,
+          freelancer: account,
+          status: "1" // Assigned
+        } : job
+      ));
     } catch (error) {
       console.error("Error applying for job:", error);
-      setError(`Failed to apply for job: ${error.message}`);
+      setError("Failed to apply for job");
     } finally {
       setLoading(false);
     }
   };
 
-  // Escrow Funds with value validation
+  // Escrow Funds - Updated
   const escrowFunds = async () => {
-    if (!contract) {
-      setError("Contract not loaded");
-      return;
-    }
-    
-    if (!selectedJobId || isNaN(selectedJobId)) {
-      setError("Please select a valid job");
-      return;
-    }
-    
-    if (!escrowAmount || isNaN(escrowAmount)) {
-      setError("Please enter a valid amount");
-      return;
-    }
+    if (!contract || !selectedJobId || !escrowAmount) return;
     
     try {
       setLoading(true);
-      setError("");
       const amountInWei = web3.utils.toWei(escrowAmount, 'ether');
       
-      const receipt = await contract.methods.escrowFunds(selectedJobId).send({
+      await contract.methods.escrowFunds(selectedJobId).send({
         from: account,
         value: amountInWei
       });
       
-      if (receipt.status) {
-        // Update escrowed amount
-        const updatedJobs = [...jobs];
-        const newEscrowed = await contract.methods.getEscrowed(selectedJobId).call();
-        updatedJobs[selectedJobId].escrowed = web3.utils.fromWei(newEscrowed, 'ether');
-        setJobs(updatedJobs);
-        
-        setSelectedJobId("");
-        setEscrowAmount("");
-      } else {
-        throw new Error('Transaction failed');
-      }
+      // Optimistic update
+      setJobs(prevJobs => prevJobs.map(job => 
+        job.id === Number(selectedJobId) ? {
+          ...job,
+          escrowed: escrowAmount
+        } : job
+      ));
+      
+      setSelectedJobId("");
+      setEscrowAmount("");
     } catch (error) {
       console.error("Error escrowing funds:", error);
-      setError(`Failed to escrow funds: ${error.message}`);
+      setError("Failed to escrow funds");
     } finally {
       setLoading(false);
     }
   };
 
-  // Release Payment with confirmation
+  // Release Payment - Updated
   const releasePayment = async (jobId) => {
-    if (!contract) {
-      setError("Contract not loaded");
-      return;
-    }
-    
-    if (!window.confirm("Are you sure you want to release payment?")) {
-      return;
-    }
+    if (!contract) return;
     
     try {
       setLoading(true);
-      setError("");
+      await contract.methods.releasePayment(jobId).send({ from: account });
       
-      const receipt = await contract.methods.releasePayment(jobId).send({ from: account });
-      
-      if (receipt.status) {
-        // Update job status
-        const updatedJobs = [...jobs];
-        updatedJobs[jobId].status = "2"; // Completed
-        updatedJobs[jobId].escrowed = "0";
-        setJobs(updatedJobs);
-      } else {
-        throw new Error('Transaction failed');
-      }
+      // Optimistic update
+      setJobs(prevJobs => prevJobs.map(job => 
+        job.id === jobId ? {
+          ...job,
+          status: "2", // Completed
+          escrowed: "0"
+        } : job
+      ));
     } catch (error) {
       console.error("Error releasing payment:", error);
-      setError(`Failed to release payment: ${error.message}`);
+      setError("Failed to release payment");
     } finally {
       setLoading(false);
     }
   };
 
-  // Refund Employer with confirmation
+  // Refund Employer - Updated
   const refundEmployer = async (jobId) => {
-    if (!contract) {
-      setError("Contract not loaded");
-      return;
-    }
-    
-    if (!window.confirm("Are you sure you want to refund the employer?")) {
-      return;
-    }
+    if (!contract) return;
     
     try {
       setLoading(true);
-      setError("");
+      await contract.methods.refundEmployer(jobId).send({ from: account });
       
-      const receipt = await contract.methods.refundEmployer(jobId).send({ from: account });
-      
-      if (receipt.status) {
-        // Update job status
-        const updatedJobs = [...jobs];
-        updatedJobs[jobId].status = "0"; // Open
-        updatedJobs[jobId].escrowed = "0";
-        setJobs(updatedJobs);
-      } else {
-        throw new Error('Transaction failed');
-      }
+      // Optimistic update
+      setJobs(prevJobs => prevJobs.map(job => 
+        job.id === jobId ? {
+          ...job,
+          status: "0", // Open
+          escrowed: "0"
+        } : job
+      ));
     } catch (error) {
       console.error("Error refunding employer:", error);
-      setError(`Failed to refund employer: ${error.message}`);
+      setError("Failed to refund employer");
     } finally {
       setLoading(false);
     }
   };
 
+  // Status text mapping
   const getStatusText = (status) => {
     switch (status) {
       case "0": return "Open";
@@ -348,7 +282,7 @@ function App() {
       <div className="header">
         <h1>Decentralized Job Board</h1>
         <button onClick={connectWallet} className="connect-wallet">
-          {account ? `Connected: ${account.substring(0, 6)}...${account.substring(38)}` : "Connect Wallet"}
+          {account ? Connected: ${account.substring(0, 6)}...${account.substring(38)} : "Connect Wallet"}
         </button>
       </div>
 
@@ -356,7 +290,6 @@ function App() {
       {error && <div className="error-message">{error}</div>}
 
       <div className="grid-container">
-        {/* Left Column - Job Posting and Management */}
         <div className="job-form">
           <h2>Post a New Job</h2>
           <div className="form-group">
@@ -426,7 +359,6 @@ function App() {
           </button>
         </div>
 
-        {/* Right Column - Job Listings */}
         <div className="job-listings">
           <h2>Available Jobs</h2>
           {jobs.length === 0 ? (
