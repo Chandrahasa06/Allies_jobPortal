@@ -123,5 +123,3 @@ truffle test
 - IPFS integration for resume and work proof storage
 - Dispute resolution via decentralized arbitration
 - DAO-based platform governance for moderation and curation
-
-```
