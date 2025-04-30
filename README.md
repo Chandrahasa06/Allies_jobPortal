@@ -78,14 +78,14 @@ npm start
 
 ---
 
-## Client Workflow
+## Employer Workflow
 
-1. Switch to "Client" mode
-2. Create a new job (title, description, price, deadline)
+1. Switch to "Employer" mode
+2. Create a new job (title, description, price)
 3. View applicants and accept the best fit
 4. Deposit funds to escrow
 5. Release funds when satisfied
-6. Optionally rate the freelancer after job completion
+6. Rate the freelancer after job completion
 
 ## Freelancer Workflow
 
@@ -93,7 +93,7 @@ npm start
 2. Browse available jobs and apply
 3. Track accepted applications in dashboard
 4. Submit work and await release
-5. Receive rating and payment upon client approval
+5. Receive rating and payment upon employer approval
 
 ---
 
