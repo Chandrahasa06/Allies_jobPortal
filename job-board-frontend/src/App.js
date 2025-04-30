@@ -3,10 +3,14 @@ import Web3 from "web3";
 import JobBoard from "./contract/JobBoard.json";
 import "./App.css";
 
-const CONTRACT_ADDRESS = "0x6B42fb9D0F43259FDD76c7c63E15274949eF8966";
+const CONTRACT_ADDRESS = "0xeF248ff4ea48f1Ded53Ffc09A281Df22408b3BAD";
 
 function App() {
   const [userRole, setUserRole] = useState(null);
+
+  const handleDisconnect = () => {
+    setUserRole(null);
+  };
 
   if (!userRole) {
     return (
@@ -30,16 +34,58 @@ function App() {
   return (
     <div className="app-container">
       {userRole === 'employer' ? (
-        <EmployerDashboard />
+        <EmployerDashboard onDisconnect={handleDisconnect} />
       ) : (
-        <FreelancerDashboard />
+        <FreelancerDashboard onDisconnect={handleDisconnect} />
       )}
     </div>
   );
 }
 
+function ErrorNotification({ message, onClose }) {
+  const [isVisible, setIsVisible] = useState(!!message);
+  const [isFading, setIsFading] = useState(false);
+
+  useEffect(() => {
+    if (message) {
+      setIsVisible(true);
+      setIsFading(false);
+      
+      const timer = setTimeout(() => {
+        setIsFading(true);
+        setTimeout(() => {
+          setIsVisible(false);
+          onClose();
+        }, 500);
+      }, 5000);
+
+      return () => clearTimeout(timer);
+    }
+  }, [message, onClose]);
+
+  if (!isVisible) return null;
+
+  return (
+    <div className={`error-notification ${isFading ? 'hidden' : ''}`}>
+      <span>{message}</span>
+      <button 
+        className="close-btn" 
+        onClick={() => {
+          setIsFading(true);
+          setTimeout(() => {
+            setIsVisible(false);
+            onClose();
+          }, 500);
+        }}
+      >
+        &times;
+      </button>
+    </div>
+  );
+}
+
 // Employer Dashboard
-function EmployerDashboard() {
+function EmployerDashboard({ onDisconnect }) {
   const [account, setAccount] = useState(null);
   const [contract, setContract] = useState(null);
   const [web3, setWeb3] = useState(null);
@@ -51,12 +97,21 @@ function EmployerDashboard() {
   const [selectedJobId, setSelectedJobId] = useState("");
   const [escrowAmount, setEscrowAmount] = useState("");
   const [newJobDescription, setNewJobDescription] = useState("");
+  const [currentTime, setCurrentTime] = useState(Math.floor(Date.now() / 1000));
+  const [rating, setRating] = useState(0);
 
   useEffect(() => {
     if (contract && account) {
       loadJobs();
     }
   }, [contract, account]);
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setCurrentTime(Math.floor(Date.now() / 1000));
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
 
   const connectWallet = async () => {
     if (window.ethereum) {
@@ -79,8 +134,13 @@ function EmployerDashboard() {
       setError("Please install MetaMask!");
     }
   };
+
+  const clearError = () => {
+    setError("");
+  };
+
   const loadJobs = async () => {
-    if (!contract) return;
+    if (!contract || !account) return;
 
     setLoading(true);
     try {
@@ -89,16 +149,23 @@ function EmployerDashboard() {
 
       for (let i = 0; i < count; i++) {
         const job = await contract.methods.getJob(i).call();
-        if (job.employer === account) {  // Only show jobs posted by this employer
+
+        if (job.employer.toLowerCase() === account.toLowerCase()) {
           const escrowed = await contract.methods.getEscrowed(i).call();
+
           jobsArray.push({
             id: i,
             title: job.title,
-            description: job.description || "N/A", // Default to "N/A" if empty
+            description: job.description || "No description provided",
             budget: web3.utils.fromWei(job.budget.toString(), 'ether'),
             status: job.status.toString(),
             escrowed: web3.utils.fromWei(escrowed.toString(), 'ether'),
-            freelancer: job.freelancer
+            employer: job.employer,
+            freelancer: job.freelancer,
+            isApplied: job.freelancer === account,
+            deadline: Number(job.deadline),
+            workCompleted: job.workCompleted,
+            rating: job.rating || 0
           });
         }
       }
@@ -116,10 +183,10 @@ function EmployerDashboard() {
     try {
       setLoading(true);
       const budgetInWei = web3.utils.toWei(newJobBudget, 'ether');
-      const description = newJobDescription.trim() || "N/A"; // Default to "N/A" if empty
+      const description = newJobDescription.trim();
 
       await contract.methods.postJob(newJobTitle, description, budgetInWei)
-        .send({ from: account, gas: 500000 });
+        .send({ from: account, gas: 1000000 });
 
       loadJobs();
       setNewJobTitle("");
@@ -132,42 +199,63 @@ function EmployerDashboard() {
     }
   };
 
-  const escrowFunds = async () => {
-    if (!contract || !selectedJobId || !escrowAmount) return;
+  const escrowFunds = async (jobId) => {
+    if (!contract || !escrowAmount) return;
 
     try {
       setLoading(true);
+
+      const job = await contract.methods.getJob(jobId).call();
+      const jobBudgetEth = web3.utils.fromWei(job.budget.toString(), 'ether');
+
+      if (escrowAmount !== jobBudgetEth) {
+        throw new Error(`Escrow amount must exactly match job budget (${jobBudgetEth} ETH)`);
+      }
+
       const amountInWei = web3.utils.toWei(escrowAmount, 'ether');
 
-      await contract.methods.escrowFunds(selectedJobId).send({
+      await contract.methods.escrowFunds(jobId).send({
         from: account,
-        value: amountInWei
+        value: amountInWei,
+        gas: 500000
       });
 
       loadJobs();
-      setSelectedJobId("");
       setEscrowAmount("");
     } catch (error) {
-      setError("Failed to escrow funds");
+      setError(error.message);
+      setTimeout(() => setError(""), 5000);
     } finally {
       setLoading(false);
     }
   };
 
   const releasePayment = async (jobId) => {
+    if (!contract || !account || rating === 0) return;
+
+    try {
+      setLoading(true);
+      setError("");
+
+      await contract.methods.releasePayment(jobId, rating).send({ from: account });
+      loadJobs();
+      setRating(0);
+    } catch (error) {
+      setError(error.message);
+      setTimeout(() => setError(""), 5000);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const refundIfDeadlinePassed = async (jobId) => {
     if (!contract || !account) return;
 
     try {
       setLoading(true);
       setError("");
 
-      // Additional check (though contract should enforce this)
-      const job = await contract.methods.getJob(jobId).call();
-      if (job.employer.toLowerCase() !== account.toLowerCase()) {
-        throw new Error("Only the job poster can release payment");
-      }
-
-      await contract.methods.releasePayment(jobId).send({ from: account });
+      await contract.methods.refundIfDeadlinePassed(jobId).send({ from: account });
       loadJobs();
     } catch (error) {
       setError(error.message);
@@ -175,6 +263,25 @@ function EmployerDashboard() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const renderStarRating = (jobId) => {
+    return (
+      <div className="rating-container">
+        <p>Rate this freelancer:</p>
+        <div className="star-rating">
+          {[1, 2, 3, 4, 5].map((star) => (
+            <span
+              key={star}
+              className={`star ${star <= rating ? 'filled' : ''}`}
+              onClick={() => setRating(star)}
+            >
+              {star <= rating ? '★' : '☆'}
+            </span>
+          ))}
+        </div>
+      </div>
+    );
   };
 
   const getStatusText = (status) => {
@@ -186,12 +293,22 @@ function EmployerDashboard() {
     }
   };
 
+  const formatTimeLeft = (deadline) => {
+    if (!deadline) return "No deadline";
+    const timeLeft = deadline - currentTime;
+    if (timeLeft <= 0) return "Deadline passed";
+    const minutes = Math.floor(timeLeft / 60);
+    const seconds = timeLeft % 60;
+    return `${minutes}m ${seconds}s left`;
+  };
+
   const openJobs = jobs.filter(job => job.status === "0");
   const assignedJobs = jobs.filter(job => job.status === "1");
   const completedJobs = jobs.filter(job => job.status === "2");
 
   return (
     <div className="dashboard employer-dashboard">
+      <ErrorNotification message={error} onClose={clearError} />
       <header className="dashboard-header">
         <h1>Employer Dashboard</h1>
         {account ? (
@@ -199,6 +316,9 @@ function EmployerDashboard() {
             <span className="wallet-address">Connected: {account.substring(0, 6)}...{account.substring(38)}</span>
             <button className="refresh-btn" onClick={loadJobs}>
               <i className="fas fa-sync-alt"></i> Refresh
+            </button>
+            <button className="disconnect-btn" onClick={onDisconnect}>
+              <i className="fas fa-sign-out-alt"></i> Disconnect
             </button>
           </div>
         ) : (
@@ -214,7 +334,6 @@ function EmployerDashboard() {
           <p>Processing transaction...</p>
         </div>
       )}
-      {error && <div className="error-message">{error}</div>}
 
       {!account ? (
         <div className="connect-prompt">
@@ -267,7 +386,7 @@ function EmployerDashboard() {
 
           <div className="jobs-section">
             <div className="job-count-display">
-              <h2>Jobs you posted: <span className="count">{jobs.length}</span></h2>
+              <h2>Your Posted Jobs: <span className="count">{jobs.length}</span></h2>
               <div className="job-count-breakdown">
                 <span>Open: {openJobs.length}</span><br></br>
                 <span>Assigned: {assignedJobs.length}</span><br></br>
@@ -296,24 +415,29 @@ function EmployerDashboard() {
                       </div>
 
                       <div className="escrow-section">
+                        <div className="escrow-info">
+                          <p>Required escrow amount: <strong>{job.budget} ETH</strong></p>
+                        </div>
                         <input
                           type="number"
-                          placeholder="ETH to escrow"
-                          value={job.id === Number(selectedJobId) ? escrowAmount : ''}
-                          onChange={(e) => {
-                            setSelectedJobId(job.id);
-                            setEscrowAmount(e.target.value);
-                          }}
+                          placeholder={`Enter exactly ${job.budget} ETH`}
+                          value={escrowAmount}
+                          onChange={(e) => setEscrowAmount(e.target.value)}
                           disabled={loading}
                           className="escrow-input"
+                          step="0.000001"
+                          min="0"
                         />
                         <button
-                          onClick={() => escrowFunds()}
+                          onClick={() => escrowFunds(job.id)}
                           disabled={loading || !escrowAmount}
                           className="secondary-btn"
                         >
                           Escrow Funds
                         </button>
+                        {error && escrowAmount !== job.budget && (
+                          <p className="error-text">Amount must match job budget</p>
+                        )}
                       </div>
                     </div>
                   ))}
@@ -335,18 +459,35 @@ function EmployerDashboard() {
                       </div>
                       <div className="job-details">
                         <p><span className="detail-label">Budget:</span> {job.budget} ETH</p>
-                        <p><span className="detail-label">Freelancer:</span> {job.freelancer.substring(0, 6)}...</p>
+                        <p><span className="detail-label">Description:</span> {job.description}</p>
                         <p><span className="detail-label">Escrowed:</span> {job.escrowed} ETH</p>
+                        <p><span className="detail-label">Deadline:</span> {formatTimeLeft(job.deadline)}</p>
+                        <p><span className="detail-label">Work Completed:</span> {job.workCompleted ? "Yes" : "No"}</p>
                       </div>
 
                       <div className="job-actions">
-                        <button
-                          onClick={() => releasePayment(job.id)}
-                          disabled={loading}
-                          className="primary-btn"
-                        >
-                          Release Payment
-                        </button>
+                        {job.workCompleted ? (
+                          <div className="release-payment-section">
+                            {renderStarRating(job.id)}
+                            <button
+                              onClick={() => releasePayment(job.id)}
+                              disabled={loading || rating === 0}
+                              className="primary-btn"
+                            >
+                              Release Payment
+                            </button>
+                          </div>
+                        ) : currentTime > job.deadline ? (
+                          <button
+                            onClick={() => refundIfDeadlinePassed(job.id)}
+                            disabled={loading}
+                            className="danger-btn"
+                          >
+                            Refund (Deadline Passed)
+                          </button>
+                        ) : (
+                          <p>Waiting for freelancer to complete work...</p>
+                        )}
                       </div>
                     </div>
                   ))}
@@ -368,7 +509,8 @@ function EmployerDashboard() {
                       </div>
                       <div className="job-details">
                         <p><span className="detail-label">Budget:</span> {job.budget} ETH</p>
-                        <p><span className="detail-label">Freelancer:</span> {job.freelancer.substring(0, 6)}...</p>
+                        <p><span className="detail-label">Description:</span> {job.description}</p>
+                        <p><span className="detail-label">Escrowed:</span> {job.escrowed} ETH</p>
                       </div>
                     </div>
                   ))}
@@ -383,19 +525,33 @@ function EmployerDashboard() {
 }
 
 // Freelancer Dashboard
-function FreelancerDashboard() {
+function FreelancerDashboard({ onDisconnect }) {
   const [account, setAccount] = useState(null);
   const [contract, setContract] = useState(null);
   const [web3, setWeb3] = useState(null);
   const [jobs, setJobs] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [currentTime, setCurrentTime] = useState(Math.floor(Date.now() / 1000));
+  const [freelancerRating, setFreelancerRating] = useState({
+    average: 0,
+    count: 0
+  });
+  const [activeTab, setActiveTab] = useState('dashboard');
 
   useEffect(() => {
     if (contract && account) {
       loadJobs();
+      loadFreelancerRating();
     }
   }, [contract, account]);
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setCurrentTime(Math.floor(Date.now() / 1000));
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
 
   const connectWallet = async () => {
     if (window.ethereum) {
@@ -421,33 +577,42 @@ function FreelancerDashboard() {
     }
   };
 
-  const loadJobs = async () => {
-    if (!contract) return;
+  const clearError = () => {
+    setError("");
+  };
 
+  const loadJobs = async () => {
+    if (!contract || !account) return;
+  
     setLoading(true);
     try {
       const count = Number(await contract.methods.getJobCount().call());
       const jobsArray = [];
-
+  
       for (let i = 0; i < count; i++) {
         const job = await contract.methods.getJob(i).call();
         const escrowed = await contract.methods.getEscrowed(i).call();
-
+        
+        const jobRating = job.rating ? Number(job.rating) : 0;
+  
         jobsArray.push({
           id: i,
           title: job.title,
+          description: job.description || "No description provided",
           budget: web3.utils.fromWei(job.budget.toString(), 'ether'),
           status: job.status.toString(),
           escrowed: web3.utils.fromWei(escrowed.toString(), 'ether'),
           employer: job.employer,
           freelancer: job.freelancer,
-          isApplied: job.freelancer === account
+          isApplied: job.freelancer === account,
+          deadline: Number(job.deadline),
+          workCompleted: job.workCompleted,
+          rating: jobRating
         });
       }
       setJobs(jobsArray);
     } catch (error) {
       setError(`Error loading jobs: ${error.message}`);
-      setTimeout(() => setError(""), 5000);
     } finally {
       setLoading(false);
     }
@@ -460,7 +625,6 @@ function FreelancerDashboard() {
       setLoading(true);
       setError("");
 
-      // Check if funds are escrowed first
       const escrowed = await contract.methods.getEscrowed(jobId).call();
       if (Number(escrowed) === 0) {
         throw new Error("Cannot apply - no funds escrowed for this job");
@@ -470,9 +634,43 @@ function FreelancerDashboard() {
       loadJobs();
     } catch (error) {
       setError(error.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const completeWork = async (jobId) => {
+    if (!contract) return;
+
+    try {
+      setLoading(true);
+      setError("");
+
+      await contract.methods.completeWork(jobId).send({ from: account });
+      loadJobs();
+    } catch (error) {
+      setError(error.message);
       setTimeout(() => setError(""), 5000);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadFreelancerRating = async () => {
+    if (!contract || !account) return;
+    
+    try {
+      const ratingInfo = await contract.methods.getFreelancerRating(account).call();
+      setFreelancerRating({
+        average: Number(ratingInfo.averageRating),
+        count: Number(ratingInfo.ratingCount)
+      });
+    } catch (error) {
+      console.error("Error loading rating:", error);
+      setFreelancerRating({
+        average: 0,
+        count: 0
+      });
     }
   };
 
@@ -483,6 +681,15 @@ function FreelancerDashboard() {
       case "2": return "Completed";
       default: return "Unknown";
     }
+  };
+
+  const formatTimeLeft = (deadline) => {
+    if (!deadline) return "No deadline";
+    const timeLeft = deadline - currentTime;
+    if (timeLeft <= 0) return "Deadline passed";
+    const minutes = Math.floor(timeLeft / 60);
+    const seconds = timeLeft % 60;
+    return `${minutes}m ${seconds}s left`;
   };
 
   const availableJobs = jobs.filter(job =>
@@ -497,13 +704,50 @@ function FreelancerDashboard() {
 
   return (
     <div className="dashboard freelancer-dashboard">
+      <ErrorNotification message={error} onClose={clearError} />
       <header className="dashboard-header">
-        <h1>Freelancer Dashboard</h1>
+        <div className="header-left">
+          <h1>Freelancer Dashboard</h1>
+          {account && (
+            <div className="freelancer-rating">
+              <div className="rating-value">{freelancerRating.average.toFixed(1)}</div>
+              <div className="stars">
+                {[1, 2, 3, 4, 5].map((star) => (
+                  <span 
+                    key={star} 
+                    className={`star ${star <= Math.round(freelancerRating.average) ? 'filled' : ''}`}
+                  >
+                    ★
+                  </span>
+                ))}
+              </div>
+              <div className="rating-count">({freelancerRating.count})</div>
+            </div>
+          )}
+        </div>
+        
         {account ? (
-          <div className="wallet-info">
+          <div className="header-right">
+            <div className="freelancer-tabs">
+              <button 
+                className={`tab-btn ${activeTab === 'dashboard' ? 'active' : ''}`}
+                onClick={() => setActiveTab('dashboard')}
+              >
+                My Jobs
+              </button>
+              <button 
+                className={`tab-btn ${activeTab === 'jobs' ? 'active' : ''}`}
+                onClick={() => setActiveTab('jobs')}
+              >
+                Available Jobs
+              </button>
+            </div>
             <span className="wallet-address">Connected: {account.substring(0, 6)}...{account.substring(38)}</span>
             <button className="refresh-btn" onClick={loadJobs}>
               <i className="fas fa-sync-alt"></i> Refresh
+            </button>
+            <button className="disconnect-btn" onClick={onDisconnect}>
+              <i className="fas fa-sign-out-alt"></i> Disconnect
             </button>
           </div>
         ) : (
@@ -519,7 +763,6 @@ function FreelancerDashboard() {
           <p>Processing transaction...</p>
         </div>
       )}
-      {error && <div className="error-message">{error}</div>}
 
       {!account ? (
         <div className="connect-prompt">
@@ -527,13 +770,91 @@ function FreelancerDashboard() {
         </div>
       ) : (
         <div className="dashboard-content">
-          <div className="jobs-section">
-            <div className="job-count-display">
-              <h2>Total Jobs Available: <span className="count">{availableJobs.length}</span></h2>
-            </div>
+          {activeTab === 'dashboard' ? (
+            <>
+              <div className="job-category">
+                <h3 className="category-title">My Assigned Jobs</h3>
+                {myAssignedJobs.length === 0 ? (
+                  <p className="no-jobs">No assigned jobs</p>
+                ) : (
+                  <div className="job-list">
+                    {myAssignedJobs.map(job => (
+                      <div key={job.id} className="job-card my-job">
+                        <div className="job-header">
+                          <h4>{job.title}</h4>
+                          <span className="status-badge assigned">{getStatusText(job.status)}</span>
+                        </div>
+                        <div className="job-details">
+                          <p><span className="detail-label">Budget:</span> {job.budget} ETH</p>
+                          <p><span className="detail-label">Description:</span> {job.description}</p>
+                          <p><span className="detail-label">Escrowed:</span> {job.escrowed} ETH</p>
+                          <p><span className="detail-label">Deadline:</span> {job.deadline ? formatTimeLeft(job.deadline) : "No deadline"}</p>
+                        </div>
 
+                        {!job.workCompleted && job.deadline && currentTime <= job.deadline && (
+                          <button
+                            onClick={() => completeWork(job.id)}
+                            disabled={loading}
+                            className="primary-btn"
+                          >
+                            Complete My Work
+                          </button>
+                        )}
+
+                        {job.workCompleted && (
+                          <p className="success-text">Work completed! Waiting for payment.</p>
+                        )}
+
+                        {job.deadline && currentTime > job.deadline && !job.workCompleted && (
+                          <p className="error-text">Deadline passed!</p>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div className="job-category">
+                <h3 className="category-title">My Completed Jobs</h3>
+                {completedJobs.length === 0 ? (
+                  <p className="no-jobs">No completed jobs</p>
+                ) : (
+                  <div className="job-list">
+                    {completedJobs.map(job => (
+                      <div key={job.id} className="job-card completed-job">
+                        <div className="job-header">
+                          <h4>{job.title}</h4>
+                          <span className="status-badge completed">{getStatusText(job.status)}</span>
+                        </div>
+                        <div className="job-details">
+                          <p><span className="detail-label">Budget:</span> {job.budget} ETH</p>
+                          <p><span className="detail-label">Description:</span> {job.description}</p>
+                          <p><span className="detail-label">Escrowed:</span> {job.escrowed} ETH</p>
+                          {job.rating > 0 && (
+                            <div className="job-rating">
+                              <span className="detail-label">Rating:</span>
+                              <div className="job-stars">
+                                {[1, 2, 3, 4, 5].map((star) => (
+                                  <span
+                                    key={star}
+                                    className={star <= job.rating ? 'filled' : ''}
+                                  >
+                                    {star <= job.rating ? '★' : '☆'}
+                                  </span>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </>
+          ) : (
             <div className="job-category">
-              <h3 className="category-title">Available Jobs</h3>
+              <h3 className="category-title">Available Jobs ({availableJobs.length})</h3>
               {availableJobs.length === 0 ? (
                 <p className="no-jobs">No available jobs currently</p>
               ) : (
@@ -546,7 +867,7 @@ function FreelancerDashboard() {
                       </div>
                       <div className="job-details">
                         <p><span className="detail-label">Budget:</span> {job.budget} ETH</p>
-                        <p><span className="detail-label">Posted by:</span> {job.employer.substring(0, 6)}...</p>
+                        <p><span className="detail-label">Description:</span> {job.description}</p>
                         <p><span className="detail-label">Escrowed:</span> {job.escrowed} ETH</p>
                       </div>
                       <button
@@ -561,55 +882,11 @@ function FreelancerDashboard() {
                 </div>
               )}
             </div>
-
-            <div className="job-category">
-              <h3 className="category-title">My Assigned Jobs</h3>
-              {myAssignedJobs.length === 0 ? (
-                <p className="no-jobs">No assigned jobs</p>
-              ) : (
-                <div className="job-list">
-                  {myAssignedJobs.map(job => (
-                    <div key={job.id} className="job-card my-job">
-                      <div className="job-header">
-                        <h4>{job.title}</h4>
-                        <span className="status-badge assigned">{getStatusText(job.status)}</span>
-                      </div>
-                      <div className="job-details">
-                        <p><span className="detail-label">Budget:</span> {job.budget} ETH</p>
-                        <p><span className="detail-label">Posted by:</span> {job.employer.substring(0, 6)}...</p>
-                        <p><span className="detail-label">Escrowed:</span> {job.escrowed} ETH</p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            <div className="job-category">
-              <h3 className="category-title">My Completed Jobs</h3>
-              {completedJobs.length === 0 ? (
-                <p className="no-jobs">No completed jobs</p>
-              ) : (
-                <div className="job-list">
-                  {completedJobs.map(job => (
-                    <div key={job.id} className="job-card completed-job">
-                      <div className="job-header">
-                        <h4>{job.title}</h4>
-                        <span className="status-badge completed">{getStatusText(job.status)}</span>
-                      </div>
-                      <div className="job-details">
-                        <p><span className="detail-label">Budget:</span> {job.budget} ETH</p>
-                        <p><span className="detail-label">Posted by:</span> {job.employer.substring(0, 6)}...</p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
+          )}
         </div>
       )}
     </div>
   );
 }
+
 export default App;
