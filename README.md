@@ -10,13 +10,13 @@ Developed as part of *CS 218: Programmable and Interoperable Blockchains*.
 ### Team: SmartContractors
 | Name         | Roll No |
 |--------------|---------|
-| Trupti U. Rathod | 230001000 |
-| Trupti U. Rathod | 230001000 |
-| Trupti U. Rathod | 230001000 |
-| Trupti U. Rathod | 230001000 |
-| Trupti U. Rathod | 230001000 |
-| Trupti U. Rathod | 230001000 |
-| Trupti U. Rathod | 230001000 |
+| Rachakonda Chandrahasa | 230001065 |
+| Rahul Kumar | 230001066 |
+| Darpan Nayak Tejavath | 230001022 |
+| Gajendra Singh Rana | 230004016 |
+| Thikmanik Nongrang | 230001077 |
+| Sai Abhilash Dash | 230005041 |
+| Mannuru Praneetha | 230005025 |
 
 
 ---
