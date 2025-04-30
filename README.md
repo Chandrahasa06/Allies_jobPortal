@@ -21,7 +21,7 @@ Developed as part of *CS 218: Programmable and Interoperable Blockchains*.
 
 ---
 
-## 💡 Features
+## Features
 
 - Clients can post jobs with title, description, pay amount, and deadline
 - Freelancers can browse available jobs and apply
@@ -32,7 +32,7 @@ Developed as part of *CS 218: Programmable and Interoperable Blockchains*.
 
 ---
 
-## ⚙️ Technologies Used
+## Technologies Used
 
 - Solidity (v0.8.20) for smart contract
 - Truffle for compilation, deployment, and testing
@@ -42,7 +42,7 @@ Developed as part of *CS 218: Programmable and Interoperable Blockchains*.
 
 ---
 
-## 🚀 Setup Instructions
+## Setup Instructions
 
 ### Requirements
 - Node.js (v18+), npm (v10+)
@@ -78,7 +78,7 @@ npm start
 
 ---
 
-## 🧑‍💼 Client Workflow
+## Client Workflow
 
 1. Switch to "Client" mode
 2. Create a new job (title, description, price, deadline)
@@ -87,7 +87,7 @@ npm start
 5. Release funds when satisfied
 6. Optionally rate the freelancer after job completion
 
-## 👨‍💻 Freelancer Workflow
+## Freelancer Workflow
 
 1. Switch to "Freelancer" mode
 2. Browse available jobs and apply
@@ -97,7 +97,7 @@ npm start
 
 ---
 
-## 🔍 Testing
+## Testing
 
 To run contract-level unit tests:
 
@@ -109,7 +109,7 @@ truffle test
 
 ---
 
-## 🧠 Gas Optimization Highlights
+## Gas Optimization Highlights
 
 - Used `uint8` for ratings, `uint256` for core timestamps and prices
 - Indexed events for lightweight log retrieval
@@ -118,7 +118,7 @@ truffle test
 
 ---
 
-## 🔮 Future Enhancements
+## Future Enhancements
 
 - IPFS integration for resume and work proof storage
 - Dispute resolution via decentralized arbitration
