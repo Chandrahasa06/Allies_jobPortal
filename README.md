@@ -1,7 +1,4 @@
 # Allies_jobPortal
-Here’s a `README.md` draft for your **Decentralized JobBoard Smart Contract Project**, modeled after the format you shared and including gas optimization and smart contract design details:
-
----
 
 # Decentralized JobBoard with Escrow
 
