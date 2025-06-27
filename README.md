@@ -71,32 +71,16 @@ Copy the mnemonic that shows up here to your clipboard
 Open metamask and click on import existing wallet, enter the password and make an account.
 Open and log into your MetaMask account, and select the dropdown that allows you to change the network
 Here, select Add a custom network
-<div align="center">
-  ![Screenshot 2025-06-27 171203](https://github.com/user-attachments/assets/60123c72-b4f1-493e-9701-47e67ac9af1d)
-
-</div>
+![Screenshot 2025-06-27 171203](https://github.com/user-attachments/assets/60123c72-b4f1-493e-9701-47e67ac9af1d)
 Save with the following fields
-<div align="center">
-  ![Screenshot 2025-06-27 171557](https://github.com/user-attachments/assets/abbabe08-66a9-486b-abd7-7c9346ec2ce0)
-
-</div>
+![Screenshot 2025-06-27 171557](https://github.com/user-attachments/assets/abbabe08-66a9-486b-abd7-7c9346ec2ce0)
 Switch to the newly created testnet, and then select the highlighted dropdown.
-<div align="center">
-   ![Screenshot 2025-06-27 171630](https://github.com/user-attachments/assets/7657303f-12f4-4dd6-9741-987862e8763c)
-
-
-</div>
+![Screenshot 2025-06-27 171630](https://github.com/user-attachments/assets/7657303f-12f4-4dd6-9741-987862e8763c)
 Select Add account or hardware wallet, paste the address copied earlier, and select import.
-<div align="center">
-   ![Screenshot 2025-06-27 171754](https://github.com/user-attachments/assets/1039077e-7c6c-4c01-abac-b77068a1bc01)
-   ![Screenshot 2025-06-27 171804](https://github.com/user-attachments/assets/7c55252a-578e-4d35-8424-023d892e54ad)
-
-
-
-</div>
+![Screenshot 2025-06-27 171754](https://github.com/user-attachments/assets/1039077e-7c6c-4c01-abac-b77068a1bc01)
+![Screenshot 2025-06-27 171804](https://github.com/user-attachments/assets/7c55252a-578e-4d35-8424-023d892e54ad)
 Your interface should now look like this
 ![Screenshot 2025-06-27 171647](https://github.com/user-attachments/assets/29d14fe9-c029-4f82-9b16-3e33be295269)
-
 
 ### 4. Compile the contracts and run the application
 Open a terminal in the root directory of the project, and run
@@ -107,10 +91,7 @@ npm start
 ```
 
 Now connect your account by opening MetaMask(make sure you're on the right test network!).
-<div align="center">
-   ![Screenshot 2025-06-27 171816](https://github.com/user-attachments/assets/a84f2de4-db65-40ec-ae5a-1cf7a66063f5)
-
-</div>
+![Screenshot 2025-06-27 171816](https://github.com/user-attachments/assets/a84f2de4-db65-40ec-ae5a-1cf7a66063f5)
 The connection, followed by a refresh, completes the setup.
 
 ## Usage
