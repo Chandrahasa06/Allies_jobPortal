@@ -7,7 +7,7 @@ Developed as part of *CS 218: Programmable and Interoperable Blockchains*.
 
 <div align="center">
 
-### Team: SmartContractors
+### Team: Allies
 | Name         | Roll No |
 |--------------|---------|
 | Rachakonda Chandrahasa | 230001065 |
